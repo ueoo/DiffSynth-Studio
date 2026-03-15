@@ -1,11 +1,17 @@
+import json
+import os
+
+import pandas
+import torch
+
 from .operators import *
-import torch, json, pandas
 
 
 class UnifiedDataset(torch.utils.data.Dataset):
     def __init__(
         self,
-        base_path=None, metadata_path=None,
+        base_path=None,
+        metadata_path=None,
         repeat=1,
         data_file_keys=tuple(),
         main_data_operator=lambda x: x,
@@ -22,39 +28,93 @@ class UnifiedDataset(torch.utils.data.Dataset):
         self.cached_data = []
         self.load_from_cache = metadata_path is None
         self.load_metadata(metadata_path)
-    
+
     @staticmethod
     def default_image_operator(
         base_path="",
-        max_pixels=1920*1080, height=None, width=None,
-        height_division_factor=16, width_division_factor=16,
+        max_pixels=1920 * 1080,
+        height=None,
+        width=None,
+        height_division_factor=16,
+        width_division_factor=16,
     ):
-        return RouteByType(operator_map=[
-            (str, ToAbsolutePath(base_path) >> LoadImage() >> ImageCropAndResize(height, width, max_pixels, height_division_factor, width_division_factor)),
-            (list, SequencialProcess(ToAbsolutePath(base_path) >> LoadImage() >> ImageCropAndResize(height, width, max_pixels, height_division_factor, width_division_factor))),
-        ])
-    
+        return RouteByType(
+            operator_map=[
+                (
+                    str,
+                    ToAbsolutePath(base_path)
+                    >> LoadImage()
+                    >> ImageCropAndResize(height, width, max_pixels, height_division_factor, width_division_factor),
+                ),
+                (
+                    list,
+                    SequencialProcess(
+                        ToAbsolutePath(base_path)
+                        >> LoadImage()
+                        >> ImageCropAndResize(height, width, max_pixels, height_division_factor, width_division_factor)
+                    ),
+                ),
+            ]
+        )
+
     @staticmethod
     def default_video_operator(
         base_path="",
-        max_pixels=1920*1080, height=None, width=None,
-        height_division_factor=16, width_division_factor=16,
-        num_frames=81, time_division_factor=4, time_division_remainder=1,
+        max_pixels=1920 * 1080,
+        height=None,
+        width=None,
+        height_division_factor=16,
+        width_division_factor=16,
+        num_frames=81,
+        time_division_factor=4,
+        time_division_remainder=1,
+        random_start: bool = False,
     ):
-        return RouteByType(operator_map=[
-            (str, ToAbsolutePath(base_path) >> RouteByExtensionName(operator_map=[
-                (("jpg", "jpeg", "png", "webp"), LoadImage() >> ImageCropAndResize(height, width, max_pixels, height_division_factor, width_division_factor) >> ToList()),
-                (("gif",), LoadGIF(
-                    num_frames, time_division_factor, time_division_remainder,
-                    frame_processor=ImageCropAndResize(height, width, max_pixels, height_division_factor, width_division_factor),
-                )),
-                (("mp4", "avi", "mov", "wmv", "mkv", "flv", "webm"), LoadVideo(
-                    num_frames, time_division_factor, time_division_remainder,
-                    frame_processor=ImageCropAndResize(height, width, max_pixels, height_division_factor, width_division_factor),
-                )),
-            ])),
-        ])
-        
+        return RouteByType(
+            operator_map=[
+                (
+                    str,
+                    ToAbsolutePath(base_path)
+                    >> RouteByExtensionName(
+                        operator_map=[
+                            (
+                                ("jpg", "jpeg", "png", "webp"),
+                                LoadImage()
+                                >> ImageCropAndResize(
+                                    height, width, max_pixels, height_division_factor, width_division_factor
+                                )
+                                >> ToList(),
+                            ),
+                            (
+                                ("gif",),
+                                LoadGIF(
+                                    num_frames,
+                                    time_division_factor,
+                                    time_division_remainder,
+                                    frame_processor=ImageCropAndResize(
+                                        height, width, max_pixels, height_division_factor, width_division_factor
+                                    ),
+                                    random_start=random_start,
+                                ),
+                            ),
+                            (
+                                ("mp4", "avi", "mov", "wmv", "mkv", "flv", "webm"),
+                                LoadVideo(
+                                    num_frames,
+                                    time_division_factor,
+                                    time_division_remainder,
+                                    frame_processor=ImageCropAndResize(
+                                        height, width, max_pixels, height_division_factor, width_division_factor
+                                    ),
+                                    random_start=random_start,
+                                ),
+                            ),
+                        ]
+                    ),
+                ),
+            ]
+        )
+
     def search_for_cached_data_files(self, path):
         for file_name in os.listdir(path):
             subpath = os.path.join(path, file_name)
@@ -62,7 +122,7 @@ class UnifiedDataset(torch.utils.data.Dataset):
                 self.search_for_cached_data_files(subpath)
             elif subpath.endswith(".pth"):
                 self.cached_data.append(subpath)
-    
+
     def load_metadata(self, metadata_path):
         if metadata_path is None:
             print("No metadata_path. Searching for cached data files.")
@@ -74,7 +134,7 @@ class UnifiedDataset(torch.utils.data.Dataset):
             self.data = metadata
         elif metadata_path.endswith(".jsonl"):
             metadata = []
-            with open(metadata_path, 'r') as f:
+            with open(metadata_path, "r") as f:
                 for line in f:
                     metadata.append(json.loads(line.strip()))
             self.data = metadata
@@ -83,25 +143,53 @@ class UnifiedDataset(torch.utils.data.Dataset):
             self.data = [metadata.iloc[i].to_dict() for i in range(len(metadata))]
 
     def __getitem__(self, data_id):
-        if self.load_from_cache:
-            data = self.cached_data[data_id % len(self.cached_data)]
-            data = self.cached_data_operator(data)
-        else:
-            data = self.data[data_id % len(self.data)].copy()
-            for key in self.data_file_keys:
-                if key in data:
-                    if key in self.special_operator_map:
-                        data[key] = self.special_operator_map[key](data[key])
-                    elif key in self.data_file_keys:
-                        data[key] = self.main_data_operator(data[key])
-        return data
+        # Robustness: a single corrupt/unsupported media file shouldn't crash
+        # a multi-epoch training run. If data processing fails, we retry with
+        # a nearby sample a few times, then re-raise with context.
+        max_tries = 10
+        last_exc = None
+
+        for attempt in range(max_tries):
+            sample_id = data_id + attempt
+            try:
+                if self.load_from_cache:
+                    data = self.cached_data[sample_id % len(self.cached_data)]
+                    data = self.cached_data_operator(data)
+                else:
+                    data = self.data[sample_id % len(self.data)].copy()
+                    for key in self.data_file_keys:
+                        if key in data:
+                            if key in self.special_operator_map:
+                                data[key] = self.special_operator_map[key](data[key])
+                            elif key in self.data_file_keys:
+                                data[key] = self.main_data_operator(data[key])
+                return data
+            except Exception as e:
+                last_exc = e
+                # Best-effort hint about which file caused it.
+                try:
+                    if not self.load_from_cache and isinstance(data, dict):
+                        suspect = {k: data.get(k) for k in self.data_file_keys if k in data}
+                    else:
+                        suspect = None
+                except Exception:
+                    suspect = None
+                print(
+                    f"[UnifiedDataset] data processing failed (attempt {attempt + 1}/{max_tries}) "
+                    f"at index={sample_id}. suspect_files={suspect}. error={type(e).__name__}: {e}"
+                )
+
+        raise RuntimeError(
+            f"UnifiedDataset: failed to load a sample after {max_tries} attempts (starting_index={data_id}). "
+            f"Last error: {type(last_exc).__name__}: {last_exc}"
+        ) from last_exc
 
     def __len__(self):
         if self.load_from_cache:
             return len(self.cached_data) * self.repeat
         else:
             return len(self.data) * self.repeat
-        
+
     def check_data_equal(self, data1, data2):
         # Debug only
         if len(data1) != len(data2):

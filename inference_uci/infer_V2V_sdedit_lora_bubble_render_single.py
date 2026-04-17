@@ -8,10 +8,8 @@ from prompt_bubble import negative_prompt, prompt
 from tqdm import trange
 
 
-# Put pretrained downloads under a shared folder (default would be ./models).
 os.environ.setdefault("DIFFSYNTH_MODEL_BASE_PATH", "/scr/yuegao/wan_models")
 
-# Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from diffsynth.pipelines.wan_video import ModelConfig, WanVideoPipeline
@@ -21,8 +19,6 @@ from diffsynth.utils.data import VideoData, save_video
 def load_clip(video_path: str, *, num_frames: int, height: int, width: int):
     video_data = VideoData(video_path, height=height, width=width)
 
-    # Build an input clip of exactly `num_frames` frames.
-    # If the source video is shorter, pad by duplicating the last frame.
     video_len = len(video_data)
     if video_len <= 0:
         raise ValueError(f"Input video has no frames: {video_path}")
@@ -37,7 +33,6 @@ def load_clip(video_path: str, *, num_frames: int, height: int, width: int):
 
 
 def format_strength(x: float) -> str:
-    # Keep filenames stable and readable: 0.4, 0.5, 0.6, 0.7 (or 0.35, etc.)
     s = f"{x:.4f}".rstrip("0").rstrip(".")
     return s if s != "" else "0"
 
@@ -67,8 +62,7 @@ def main(args):
         tokenizer_config=ModelConfig(model_id="Wan-AI/Wan2.1-T2V-1.3B", origin_file_pattern="google/umt5-xxl/"),
     )
 
-    # Load LoRA
-    wan_root_path = "/viscam/data/two-phase-flow/wan_models/train"
+    wan_root_path = "/scr/yuegao/wan_models/train"
     lora_epoch = args.lora_epoch
     pipe.load_lora(
         pipe.dit,
@@ -81,7 +75,6 @@ def main(args):
         alpha=1,
     )
 
-    # Video SDEdit settings
     num_frames = args.num_frames
     height, width = args.height, args.width
     if args.sdedit_strengths is not None and len(args.sdedit_strengths) > 0:
@@ -89,41 +82,38 @@ def main(args):
     elif args.sdedit_strength is not None:
         sdedit_strengths = [args.sdedit_strength]
     else:
-        sdedit_strengths = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7]
+        sdedit_strengths = [0.5]
 
-    exp_logs_root = "/svl/data/two-phase-flow/yuegao/gaussian_tpf_logs/"
-    exp_part = "tpf_real_charuco_dyn_2dgs_sdf"
-    exp_folder = "uci_0923_2dgs_sdf_start00002dur100step1_cleanbubble_initym0d017_prunezn0d36n0d35_prunexn0d015p0d015_proj500_zerone2"
-    exp_path = os.path.join(exp_logs_root, exp_part, exp_folder)
+    exp_logs_root = "/svl/data/two-phase-flow/yuegao/gaussian_tpf_logs"
+    exp_part = "tpf_real_charuco_dyn_2dgs_icml_single"
+    merged_folder = "uci_0923_2dgs_start00002_to_start00102dur1step1_icml_rebut_merged"
+    padwan_dir = os.path.join(exp_logs_root, exp_part, merged_folder, "test_renders_padwan")
 
-    merged_dir = "test_padwan_mp4"
+    cam_names = ["cam2"]
+    # for deg in range(30, 360, 30):
+    #     cam_names.append(f"camnoveldeg{deg:03d}")
 
-    cam_names = []
-    for deg in range(30, 360, 30):
-        cam_names.append(f"camnoveldeg{deg:03d}")
-
-    # First split across distributed ranks
     if args.world_size > 1:
         start = len(cam_names) * args.rank // args.world_size
         end = len(cam_names) * (args.rank + 1) // args.world_size
         cam_names = cam_names[start:end]
 
-    # Then split across GPUs on this node
     cam_names = cam_names[args.gpu_idx :: args.gpu_num]
 
-    map_type = "render"
+    out_root = "/svl/data/two-phase-flow/yuegao/wan_results"
 
     for cam_name in cam_names:
-        video_path = f"{exp_path}/{merged_dir}/{map_type}_{cam_name}.mp4"
+        video_path = os.path.join(padwan_dir, f"{cam_name}.mp4")
         input_video = load_clip(video_path, num_frames=num_frames, height=height, width=width)
 
         num_samples = args.num_samples
         for sdedit_strength in sdedit_strengths:
             strength_tag = format_strength(sdedit_strength)
             for i in trange(num_samples, desc=f"GPU {args.gpu_idx}: {cam_name} (sdedit={strength_tag})"):
-                out_path = (
-                    f"wan_results/video_Wan2_2_V2V_A14B_{cam_name}_sdedit_strength{strength_tag}_"
-                    f"lora_epoch{lora_epoch}_bubble_{i:02d}.mp4"
+                out_path = os.path.join(
+                    out_root,
+                    f"video_Wan2_2_V2V_A14B_single_{cam_name}_sdedit_strength{strength_tag}_"
+                    f"lora_epoch{lora_epoch}_bubble_{i:02d}.mp4",
                 )
                 if args.skip_existing and os.path.exists(out_path):
                     continue
@@ -155,7 +145,6 @@ if __name__ == "__main__":
     parser.add_argument("--num_frames", type=int, default=101)
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--width", type=int, default=832)
-    # If --sdedit_strengths is provided, it takes precedence.
     parser.add_argument("--sdedit_strength", type=float, default=None)
     parser.add_argument("--sdedit_strengths", type=float, nargs="*", default=None)
     parser.add_argument("--lora_epoch", type=int, default=10)

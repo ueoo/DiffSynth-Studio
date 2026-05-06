@@ -25,8 +25,8 @@ CUDA_VISIBLE_DEVICES=4 bash "${SCRIPT_DIR}/train_wan_i2v_blenderflowers_rose_hig
 CUDA_VISIBLE_DEVICES=5 bash "${SCRIPT_DIR}/train_wan_i2v_blenderflowers_dahlia_low.sh" &
 CUDA_VISIBLE_DEVICES=6 bash "${SCRIPT_DIR}/train_wan_i2v_blenderflowers_daisy_low.sh" &
 CUDA_VISIBLE_DEVICES=7 bash "${SCRIPT_DIR}/train_wan_i2v_blenderflowers_hibiscus_low.sh" &
-# CUDA_VISIBLE_DEVICES=0 bash "${SCRIPT_DIR}/train_wan_i2v_blenderflowers_lily_low.sh" &
-# CUDA_VISIBLE_DEVICES=1 bash "${SCRIPT_DIR}/train_wan_i2v_blenderflowers_rose_low.sh" &
+CUDA_VISIBLE_DEVICES=0 bash "${SCRIPT_DIR}/train_wan_i2v_blenderflowers_lily_low.sh" &
+CUDA_VISIBLE_DEVICES=1 bash "${SCRIPT_DIR}/train_wan_i2v_blenderflowers_rose_low.sh" &
 
 wait
 echo "All Blender flowers finetuning jobs (high + low noise) finished."

@@ -3,19 +3,19 @@ set -euo pipefail
 
 {
 
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-2}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 GPU_IDX=0
-SUBSET="hibiscusfull"
-TEST_DATA_ROOT="/scr/yuegao/TRELLIS_datasets/BlenderFlowers_Hibiscusmore10kfullTest_merged"
-TEST_SCENE_NAME="Hibiscusmore_010054"
-FRAME_IDX=20
-FLOWER_NAME="hibiscus"
-NUM_FRAMES=49
+SUBSET="rosefull"
+TEST_DATA_ROOT="/scr/yuegao/4d_state_machine_all/TRELLIS_datasets/BlenderFlowers_Rosemore50kfullTest_merged"
+TEST_SCENE_NAME="Rosemore_050016"
+FRAME_IDX=090
+FLOWER_NAME="rose"
+NUM_FRAMES=81
 SEED=1
-OUTPUT_ROOT="/scr/yuegao/4d_state_machine_all/wan2_2_i2v_results_finetune"
+OUTPUT_ROOT="/scr/yuegao/4d_state_machine_all/wan2_2_i2v_results_finetune_81f"
 LORA_BASE="${LORA_BASE:-/scr/yuegao/wan_models/train_blenderflowers}"
 LORA_EPOCH="5"
 

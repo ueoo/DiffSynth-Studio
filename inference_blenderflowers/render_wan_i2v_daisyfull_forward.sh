@@ -16,7 +16,7 @@ FRAME_IDX=20
 FLOWER_NAME="daisy"
 NUM_FRAMES=49
 SEED=1
-OUTPUT_ROOT="/scr/yuegao/wan2_2_i2v_results_finetune"
+OUTPUT_ROOT="/scr/yuegao/4d_state_machine_all/wan2_2_i2v_results_finetune"
 LORA_BASE="${LORA_BASE:-/scr/yuegao/wan_models/train_blenderflowers}"
 LORA_EPOCH="5"
 
